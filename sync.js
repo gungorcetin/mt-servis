@@ -83,11 +83,14 @@ window.Sync = (() => {
         }
       }
 
-      // Yerel -> bulut (yerelde olup bulutta olmayan / daha yeni olanları gönder)
-      const remoteMap = new Map((data || []).map((r) => [r.id, r.data]));
+      // Yerel -> bulut: SADECE bulutta hiç olmayan yerel kayıtları yükle
+      // (çevrimdışı oluşturulmuş kayıtlar). Bulutta zaten var olan kaydı ASLA
+      // pull sırasında ezme — güncellemeler yalnızca kullanıcı kaydet/sil
+      // yaptığında buluta gider. Bu, eski bir istemcinin güncel veriyi
+      // ezmesini (veri kaybını) engeller.
+      const remoteIds = new Set((data || []).map((r) => r.id));
       for (const j of local) {
-        const r = remoteMap.get(j.id);
-        if (!r || (j.updatedAt || 0) > (r.updatedAt || 0)) {
+        if (!remoteIds.has(j.id)) {
           await push(j);
         }
       }

@@ -594,6 +594,39 @@
     return out;
   }
 
+  // OCR öncesi görüntü iyileştirme: ölçekle + gri tonlama + kontrast
+  function preprocessForOCR(file, target = 2200) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        let { width: w, height: h } = img;
+        const scale = target / Math.max(w, h); // küçükse büyüt, çok büyükse küçült
+        w = Math.max(1, Math.round(w * scale));
+        h = Math.max(1, Math.round(h * scale));
+        const c = document.createElement("canvas");
+        c.width = w; c.height = h;
+        const ctx = c.getContext("2d");
+        ctx.drawImage(img, 0, 0, w, h);
+        try {
+          const imgData = ctx.getImageData(0, 0, w, h);
+          const d = imgData.data;
+          const contrast = 1.5, intercept = 128 * (1 - contrast);
+          for (let i = 0; i < d.length; i += 4) {
+            let g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+            g = g * contrast + intercept;           // kontrast artır
+            g = g < 0 ? 0 : g > 255 ? 255 : g;
+            d[i] = d[i + 1] = d[i + 2] = g;          // gri tonlama
+          }
+          ctx.putImageData(imgData, 0, 0);
+        } catch (e) { /* getImageData başarısızsa ham ölçekli görüntü kullanılır */ }
+        URL.revokeObjectURL(url);
+        resolve(c.toDataURL("image/jpeg", 0.92));
+      };
+      img.src = url;
+    });
+  }
+
   function setSelectVal(id, val) {
     const el = document.getElementById(id);
     if (!el || !val) return false;
@@ -616,9 +649,10 @@
       status.textContent = "OCR motoru yükleniyor…";
       try {
         if (!window.Tesseract) await loadScript("https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js");
-        status.textContent = "Ruhsat okunuyor… (biraz sürebilir)";
-        const dataUrl = await fileToDataURL(f, 1600, 0.85);
-        const { data } = await window.Tesseract.recognize(dataUrl, "eng");
+        status.textContent = "Türkçe dil paketi hazırlanıyor / ruhsat okunuyor… (ilk sefer biraz sürer)";
+        // Görüntü ön işleme (gri tonlama + kontrast + ölçek) OCR doğruluğunu artırır
+        const dataUrl = await preprocessForOCR(f);
+        const { data } = await window.Tesseract.recognize(dataUrl, "tur+eng");
         const info = parseRuhsat(data.text || "");
 
         // 2) Alanları doldur (sadece boş olanları ezmemek için: OCR bulduysa yaz)
