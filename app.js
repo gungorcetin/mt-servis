@@ -3,6 +3,7 @@
   const app = document.getElementById("app");
   const tabs = document.querySelectorAll(".tab");
   let current = null; // düzenlenen job
+  let listFilter = "kabul"; // liste sekmesi: "kabul" (serviste) | "teslim"
 
   // ---------- yardımcılar ----------
   const uid = () =>
@@ -99,14 +100,45 @@
       document.getElementById("emptyNew").onclick = () => startNew();
       return;
     }
+    const nOpen = jobs.filter((j) => j.status !== "teslim").length;
+    const nDone = jobs.filter((j) => j.status === "teslim").length;
     app.innerHTML = `
       <div class="listwrap">
+        <div class="segmented">
+          <button class="seg ${listFilter === "kabul" ? "active" : ""}" data-f="kabul">Serviste <span class="seg-n">${nOpen}</span></button>
+          <button class="seg ${listFilter === "teslim" ? "active" : ""}" data-f="teslim">Teslim edilen <span class="seg-n">${nDone}</span></button>
+        </div>
         <input id="search" class="search" placeholder="Ara: plaka, müşteri, marka…" />
+        <div class="daterow">
+          <label>Tarih:</label>
+          <input id="d_from" class="datein" type="date" />
+          <span>–</span>
+          <input id="d_to" class="datein" type="date" />
+          <button id="d_clear" class="dclear" title="Temizle">✕</button>
+        </div>
         <div id="cards"></div>
       </div>`;
     const cards = document.getElementById("cards");
-    const draw = (items) => {
-      cards.innerHTML = items.map((j) => {
+    const draw = () => {
+      const q = document.getElementById("search").value.toLowerCase().trim();
+      const fromV = document.getElementById("d_from").value;
+      const toV = document.getElementById("d_to").value;
+      const fromTs = fromV ? new Date(fromV + "T00:00:00").getTime() : null;
+      const toTs = toV ? new Date(toV + "T23:59:59").getTime() : null;
+      const filtered = jobs.filter((j) => {
+        const inTab = listFilter === "teslim" ? j.status === "teslim" : j.status !== "teslim";
+        if (!inTab) return false;
+        if (fromTs && (j.createdAt || 0) < fromTs) return false;
+        if (toTs && (j.createdAt || 0) > toTs) return false;
+        if (!q) return true;
+        const hay = [j.vehicle.plate, j.vehicle.brand, j.vehicle.model, j.customer.name, j.vehicle.vin].join(" ").toLowerCase();
+        return hay.includes(q);
+      });
+      if (!filtered.length) {
+        cards.innerHTML = `<div class="list-empty">${listFilter === "teslim" ? "Teslim edilen araç yok." : "Serviste araç yok."}</div>`;
+        return;
+      }
+      cards.innerHTML = filtered.map((j) => {
         const st = STATUS[j.status] || STATUS.kabul;
         const v = j.vehicle;
         const title = [v.brand, v.model].filter(Boolean).join(" ") || "Araç";
@@ -124,14 +156,22 @@
         el.onclick = () => openJob(el.dataset.id);
       });
     };
-    draw(jobs);
-    document.getElementById("search").oninput = (e) => {
-      const q = e.target.value.toLowerCase().trim();
-      draw(jobs.filter((j) => {
-        const hay = [j.vehicle.plate, j.vehicle.brand, j.vehicle.model, j.customer.name, j.vehicle.vin].join(" ").toLowerCase();
-        return hay.includes(q);
-      }));
+    draw();
+    document.getElementById("search").oninput = draw;
+    document.getElementById("d_from").onchange = draw;
+    document.getElementById("d_to").onchange = draw;
+    document.getElementById("d_clear").onclick = () => {
+      document.getElementById("d_from").value = "";
+      document.getElementById("d_to").value = "";
+      draw();
     };
+    app.querySelectorAll(".seg").forEach((b) => {
+      b.onclick = () => {
+        listFilter = b.dataset.f;
+        app.querySelectorAll(".seg").forEach((x) => x.classList.toggle("active", x === b));
+        draw();
+      };
+    });
   }
 
   function startNew() {
@@ -353,6 +393,7 @@
             ? '<button class="btn btn-primary" id="reopen">Düzenlemeyi Aç</button>'
             : '<button class="btn btn-primary" id="save">Kaydet</button><button class="btn btn-success" id="deliver">Teslim Et ✓</button>'}
           <button class="btn btn-ghost" id="print">🖨️ Özet / Yazdır</button>
+          <button class="btn btn-danger" id="del">Sil</button>
         </div>
         ${teslim ? `<div class="delivered-note">Teslim: ${fmtDate(j.deliveredAt)}</div>` : ""}
       </div>`;
@@ -385,7 +426,13 @@
     };
     const reopen = document.getElementById("reopen");
     if (reopen) reopen.onclick = async () => { j.status = "kabul"; j.deliveredAt = null; await saveJob(j); renderDetail(); };
-    document.getElementById("print").onclick = () => printSummary(j);
+    document.getElementById("del").onclick = async () => {
+      const msg = teslim
+        ? "Bu araç TESLİM EDİLMİŞ bir kayıt. Yine de kalıcı olarak silmek istediğine emin misin?"
+        : "Bu kaydı silmek istediğine emin misin?";
+      if (confirm(msg)) { await deleteJob(j.id); renderList(); }
+    };
+    document.getElementById("print").onclick = () => renderSummary(j);
   }
 
   // ---------- İmza (canvas) ----------
@@ -415,32 +462,44 @@
     document.getElementById("sigClear").onclick = () => { ctx.clearRect(0, 0, c.width, c.height); j.signature = null; };
   }
 
-  // ---------- Özet / yazdır ----------
-  function printSummary(j) {
+  // ---------- Özet / yazdır (uygulama içi, geri dönülebilir) ----------
+  function renderSummary(j) {
+    document.querySelector(".tabbar").style.display = "none";
     const items = (j.workDone && j.workDone.length ? j.workDone : j.maintenance) || [];
-    const rows = items.map((id) => `<li>${window.CATALOG_LABELS[id] || id}</li>`).join("");
-    const w = window.open("", "_blank");
-    w.document.write(`<html><head><meta charset="utf-8"><title>MT Servis - ${esc(j.vehicle.plate)}</title>
-      <style>body{font-family:system-ui,Arial;margin:24px;color:#111}h1{font-size:20px}h2{font-size:15px;margin-top:18px;border-bottom:1px solid #ddd;padding-bottom:4px}
-      .g{display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;font-size:14px}.k{color:#666}img.sig{border:1px solid #ddd;max-width:300px}ul{font-size:14px}</style></head><body>
-      <h1>MT Servis — İş Emri</h1>
-      <div style="color:#555;font-size:12px;margin:2px 0 14px">${esc(SHOP.address)} · Tel: ${esc(SHOP.phone)}</div>
-      <div class="g">
-        <div><span class="k">Plaka:</span> <b>${esc(j.vehicle.plate)}</b></div>
-        <div><span class="k">Araç:</span> ${esc([j.vehicle.brand,j.vehicle.model,j.vehicle.year].filter(Boolean).join(" "))}</div>
-        <div><span class="k">Müşteri:</span> ${esc(j.customer.name)}</div>
-        <div><span class="k">Telefon:</span> ${esc(j.customer.phone)}</div>
-        <div><span class="k">KM:</span> ${esc(j.vehicle.km)}</div>
-        <div><span class="k">VIN:</span> ${esc(j.vehicle.vin)}</div>
-        <div><span class="k">Giriş:</span> ${fmtDate(j.createdAt)}</div>
-        <div><span class="k">Teslim:</span> ${fmtDate(j.deliveredAt)}</div>
+    const rows = items.map((id) => `<li>${esc(window.CATALOG_LABELS[id] || id)}</li>`).join("");
+    app.innerHTML = `
+      <div class="form-head no-print">
+        <button class="back" id="s_back">‹ Geri</button>
+        <h2>Özet</h2>
       </div>
-      ${j.complaints ? `<h2>Şikayetler</h2><div>${esc(j.complaints)}</div>` : ""}
-      <h2>Yapılan İşlemler</h2><ul>${rows || "<li>-</li>"}</ul>
-      ${j.workNotes ? `<h2>Notlar</h2><div>${esc(j.workNotes)}</div>` : ""}
-      ${j.signature ? `<h2>Müşteri İmzası</h2><img class="sig" src="${j.signature}"/>` : ""}
-      </body></html>`);
-    w.document.close(); w.focus(); setTimeout(() => w.print(), 300);
+      <div id="printArea" class="print-area">
+        <div class="pa-head">
+          <h1>MT Servis — İş Emri</h1>
+          <div class="pa-shop">${esc(SHOP.address)} · Tel: ${esc(SHOP.phone)}</div>
+        </div>
+        <div class="pa-grid">
+          <div><span class="k">Plaka:</span> <b>${esc(j.vehicle.plate) || "—"}</b></div>
+          <div><span class="k">Araç:</span> ${esc([j.vehicle.brand, j.vehicle.model, j.vehicle.year].filter(Boolean).join(" ")) || "—"}</div>
+          <div><span class="k">Müşteri:</span> ${esc(j.customer.name) || "—"}</div>
+          <div><span class="k">Telefon:</span> ${esc(j.customer.phone) || "—"}</div>
+          <div><span class="k">KM:</span> ${esc(j.vehicle.km) || "—"}</div>
+          <div><span class="k">VIN:</span> ${esc(j.vehicle.vin) || "—"}</div>
+          <div><span class="k">Giriş:</span> ${fmtDate(j.createdAt)}</div>
+          <div><span class="k">Teslim:</span> ${fmtDate(j.deliveredAt)}</div>
+        </div>
+        ${j.complaints ? `<h3 class="pa-h">Şikayetler</h3><div>${esc(j.complaints)}</div>` : ""}
+        <h3 class="pa-h">Yapılan İşlemler</h3><ul class="pa-ul">${rows || "<li>-</li>"}</ul>
+        ${j.workNotes ? `<h3 class="pa-h">Notlar</h3><div>${esc(j.workNotes)}</div>` : ""}
+        ${j.signature ? `<h3 class="pa-h">Müşteri İmzası</h3><img class="pa-sig" src="${j.signature}"/>` : ""}
+      </div>
+      <div class="actions no-print">
+        <button class="btn btn-primary" id="s_print">🖨️ Yazdır / PDF</button>
+        <button class="btn btn-ghost" id="s_back2">‹ Geri Dön</button>
+      </div>`;
+    const back = () => { document.querySelector(".tabbar").style.display = ""; renderDetail(); };
+    document.getElementById("s_back").onclick = back;
+    document.getElementById("s_back2").onclick = back;
+    document.getElementById("s_print").onclick = () => window.print();
   }
 
   // ---------- VIN OCR (opsiyonel, Tesseract CDN) ----------

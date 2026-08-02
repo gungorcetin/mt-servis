@@ -79,6 +79,18 @@ main { flex: 1; overflow-y: auto; padding: 14px 14px 90px; }
 .empty-ic { font-size: 54px; }
 .empty p { margin: 10px 0 20px; }
 
+/* Segmented (Serviste / Teslim edilen) */
+.segmented { display: flex; gap: 6px; background: #0e1728; border: 1px solid var(--line); border-radius: 12px; padding: 4px; margin-bottom: 12px; }
+.seg { flex: 1; background: none; border: none; color: var(--mut); padding: 10px 8px; border-radius: 9px; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; }
+.seg.active { background: var(--pri); color: #fff; }
+.seg-n { font-size: 12px; background: rgba(255,255,255,.18); padding: 1px 8px; border-radius: 20px; min-width: 20px; }
+.seg:not(.active) .seg-n { background: #1c2743; }
+.list-empty { text-align: center; color: var(--mut); padding: 40px 20px; font-size: 14px; }
+.daterow { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 13px; color: var(--mut); }
+.daterow label { flex-shrink: 0; }
+.datein { flex: 1; min-width: 0; padding: 9px 8px; border-radius: 9px; border: 1px solid var(--line); background: #0e1728; color: var(--txt); font-size: 13px; }
+.dclear { flex-shrink: 0; background: #1c2743; border: 1px solid var(--line); color: var(--mut); width: 34px; height: 34px; border-radius: 9px; cursor: pointer; }
+
 /* List */
 .search {
   width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line);
@@ -151,6 +163,24 @@ main { flex: 1; overflow-y: auto; padding: 14px 14px 90px; }
 /* Actions */
 .actions { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
 .delivered-note { text-align: center; color: var(--mut); font-size: 13px; margin-top: 12px; }
+
+/* Özet / yazdır ekranı — beyaz kağıt görünümü */
+.print-area { background: #fff; color: #111; border-radius: 12px; padding: 20px; margin-bottom: 12px; }
+.print-area .pa-head h1 { font-size: 19px; margin: 0; }
+.print-area .pa-shop { color: #555; font-size: 12px; margin: 2px 0 14px; }
+.print-area .pa-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 20px; font-size: 14px; }
+.print-area .k { color: #666; }
+.print-area .pa-h { font-size: 14px; margin: 16px 0 6px; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
+.print-area .pa-ul { font-size: 14px; margin: 6px 0; padding-left: 20px; }
+.print-area .pa-sig { border: 1px solid #ddd; max-width: 280px; width: 100%; background: #fff; }
+
+/* Yazdırma: sadece #printArea görünsün */
+@media print {
+  body { background: #fff; }
+  .topbar, .tabbar, .no-print, #toast { display: none !important; }
+  main { padding: 0 !important; overflow: visible !important; }
+  .print-area { border-radius: 0; padding: 0; margin: 0; }
+}
 
 /* Toast */
 .toast {
