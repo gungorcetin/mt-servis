@@ -17,6 +17,13 @@
     teslim: { label: "Teslim edildi", cls: "st-done" },
   };
 
+  // Atölye bilgileri (çıktı ve giriş ekranında kullanılır)
+  const SHOP = {
+    name: "MT Servis",
+    address: "Kazımdirik, 409. Sk. No:10, 35100 Bornova/İzmir",
+    phone: "0532 630 44 56",
+  };
+
   // Kaydet (cihaz + bulut) ve sil (cihaz + bulut) yardımcıları
   async function saveJob(j) {
     j.updatedAt = Date.now();
@@ -417,6 +424,7 @@
       <style>body{font-family:system-ui,Arial;margin:24px;color:#111}h1{font-size:20px}h2{font-size:15px;margin-top:18px;border-bottom:1px solid #ddd;padding-bottom:4px}
       .g{display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;font-size:14px}.k{color:#666}img.sig{border:1px solid #ddd;max-width:300px}ul{font-size:14px}</style></head><body>
       <h1>MT Servis — İş Emri</h1>
+      <div style="color:#555;font-size:12px;margin:2px 0 14px">${esc(SHOP.address)} · Tel: ${esc(SHOP.phone)}</div>
       <div class="g">
         <div><span class="k">Plaka:</span> <b>${esc(j.vehicle.plate)}</b></div>
         <div><span class="k">Araç:</span> ${esc([j.vehicle.brand,j.vehicle.model,j.vehicle.year].filter(Boolean).join(" "))}</div>
@@ -489,13 +497,17 @@
     document.querySelector(".tabbar").style.display = "none";
     app.innerHTML = `
       <div class="login">
-        <img src="icon.svg" class="login-logo" alt="" />
+        <div class="login-logos">
+          <img src="bmw.png" alt="BMW" class="marka-logo" />
+          <img src="mini-cooper.png" alt="Mini" class="marka-logo marka-mini" />
+        </div>
         <h2>MT Servis</h2>
         <p class="login-sub">Atölye girişi</p>
         <input id="l_email" class="in" type="email" placeholder="E-posta" autocomplete="username" />
         <input id="l_pass" class="in" type="password" placeholder="Şifre" autocomplete="current-password" />
         ${errMsg ? `<div class="login-err">${esc(errMsg)}</div>` : ""}
         <button class="btn btn-primary" id="l_btn">Giriş Yap</button>
+        <div class="login-contact">${esc(SHOP.address)}<br>Tel: ${esc(SHOP.phone)}</div>
       </div>`;
     const btn = document.getElementById("l_btn");
     const submit = async () => {

@@ -1,5 +1,5 @@
 // MT Servis - basit offline cache
-const CACHE = "mtservis-v3";
+const CACHE = "mtservis-v4";
 const ASSETS = [
   "./",
   "./index.html",
@@ -11,6 +11,8 @@ const ASSETS = [
   "./app.js",
   "./manifest.json",
   "./icon.svg",
+  "./bmw.png",
+  "./mini-cooper.png",
 ];
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)));
