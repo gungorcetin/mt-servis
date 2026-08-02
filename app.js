@@ -18,6 +18,9 @@
     teslim: { label: "Teslim edildi", cls: "st-done" },
   };
 
+  // Uygulama sürümü (SW cache ile aynı tutulur)
+  const APP_VERSION = "v10";
+
   // Atölye bilgileri (çıktı ve giriş ekranında kullanılır)
   const SHOP = {
     name: "MT Servis",
@@ -754,6 +757,8 @@
 
   // başlat
   (async () => {
+    const ver = document.getElementById("appVer");
+    if (ver) ver.textContent = APP_VERSION;
     setBadge();
     if (window.Sync && Sync.enabled) {
       const session = await Sync.getSession();

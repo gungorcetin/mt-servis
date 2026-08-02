@@ -34,6 +34,8 @@ body {
 .brand-name { font-weight: 700; font-size: 17px; letter-spacing: .3px; }
 .brand-sub { font-size: 12px; color: var(--mut); }
 .badge { font-size: 11px; padding: 4px 9px; border-radius: 20px; border: 1px solid var(--line); color: var(--mut); }
+.topbar-right { display: flex; align-items: center; gap: 8px; }
+.appver { font-size: 11px; color: var(--mut); opacity: .7; }
 .badge-local { background: #1a2540; }
 .badge-cloud { background: #0e3320; color: #4ade80; border-color: #1a5c38; }
 .badge-err { background: #3a1414; color: #f87171; border-color: #5c1a1a; }
