@@ -50,7 +50,7 @@
       createdAt: Date.now(),
       deliveredAt: null,
       customer: { name: "", phone: "", email: "" },
-      vehicle: { brand: "", model: "", year: "", plate: "", vin: "", km: "" },
+      vehicle: { brand: "", model: "", year: "", plate: "", vin: "", km: "", fuel: "" },
       complaints: "",
       maintenance: [], // seçili item id'leri (kabulde talep)
       photosIn: [],
@@ -212,6 +212,16 @@
     return wrap;
   }
 
+  // Kabul ekranındaki "Fotoğraflar" gridini (yeniden) oluştur
+  function refreshPhotosIn() {
+    const el = document.getElementById("photosIn");
+    if (!el) return;
+    el.innerHTML = "";
+    el.appendChild(
+      photoGrid(current.photosIn, (p) => current.photosIn.push(p), (i) => current.photosIn.splice(i, 1), "Ekle")
+    );
+  }
+
   // ---------- KABUL ekranı ----------
   function renderKabul() {
     setTab(current && current.createdAt ? "list" : "new");
@@ -247,7 +257,14 @@
             <input id="v_km" class="in" type="number" placeholder="KM" value="${esc(j.vehicle.km)}" />
             <input id="v_vin" class="in" placeholder="Şasi / VIN" value="${esc(j.vehicle.vin)}" style="text-transform:uppercase" />
           </div>
-          <button id="scanVin" class="btn btn-ghost">📷 Ruhsattan VIN oku (OCR)</button>
+          <div class="row2">
+            <select id="v_fuel" class="in">
+              <option value="">Yakıt Cinsi</option>
+              ${["Dizel","Benzin","LPG","Hibrit","Elektrik","Diğer"].map(f=>`<option ${j.vehicle.fuel===f?"selected":""}>${f}</option>`).join("")}
+            </select>
+            <div></div>
+          </div>
+          <button id="scanVin" class="btn btn-ghost">📷 Ruhsat oku (OCR)</button>
           <div id="ocrStatus" class="ocr-status"></div>
         </section>
 
@@ -274,10 +291,8 @@
         </div>
       </div>`;
 
-    // fotoğraf grid
-    document.getElementById("photosIn").appendChild(
-      photoGrid(j.photosIn, (p) => j.photosIn.push(p), (i) => j.photosIn.splice(i, 1), "Ekle")
-    );
+    // fotoğraf grid (OCR sonrası tazelenebilir olsun diye ayrı fonksiyon)
+    refreshPhotosIn();
 
     // bakım katalog
     renderCatalog(document.getElementById("mnt"), j.maintenance);
@@ -308,6 +323,7 @@
     j.vehicle = {
       brand: g("v_brand"), model: g("v_model"), year: g("v_year"),
       plate: g("v_plate").toUpperCase(), km: g("v_km"), vin: g("v_vin").toUpperCase(),
+      fuel: g("v_fuel"),
     };
     j.complaints = g("complaints");
     j.maintenance = collectChecked("mnt");
@@ -363,7 +379,10 @@
             <div><span class="lbl">Müşteri</span><b>${esc(j.customer.name) || "—"}</b></div>
             <div><span class="lbl">KM</span><b>${esc(j.vehicle.km) || "—"}</b></div>
           </div>
-          <div><span class="lbl">VIN</span><b>${esc(j.vehicle.vin) || "—"}</b></div>
+          <div class="row2">
+            <div><span class="lbl">VIN</span><b>${esc(j.vehicle.vin) || "—"}</b></div>
+            <div><span class="lbl">Yakıt</span><b>${esc(j.vehicle.fuel) || "—"}</b></div>
+          </div>
           ${j.complaints ? `<div><span class="lbl">Şikayet</span><span>${esc(j.complaints)}</span></div>` : ""}
         </section>
 
@@ -484,6 +503,7 @@
           <div><span class="k">Telefon:</span> ${esc(j.customer.phone) || "—"}</div>
           <div><span class="k">KM:</span> ${esc(j.vehicle.km) || "—"}</div>
           <div><span class="k">VIN:</span> ${esc(j.vehicle.vin) || "—"}</div>
+          <div><span class="k">Yakıt:</span> ${esc(j.vehicle.fuel) || "—"}</div>
           <div><span class="k">Giriş:</span> ${fmtDate(j.createdAt)}</div>
           <div><span class="k">Teslim:</span> ${fmtDate(j.deliveredAt)}</div>
         </div>
@@ -502,29 +522,118 @@
     document.getElementById("s_print").onclick = () => window.print();
   }
 
-  // ---------- VIN OCR (opsiyonel, Tesseract CDN) ----------
+  // ---------- Ruhsat OCR (opsiyonel, Tesseract CDN) ----------
+  // Türkçe karakterleri ASCII'ye indirger (eşleştirme için)
+  function asciify(s) {
+    return s.toUpperCase()
+      .replace(/İ/g, "I").replace(/I/g, "I").replace(/Ş/g, "S").replace(/Ğ/g, "G")
+      .replace(/Ü/g, "U").replace(/Ö/g, "O").replace(/Ç/g, "C");
+  }
+
+  // Ruhsat metninden araç bilgilerini ayrıştır
+  function parseRuhsat(rawText) {
+    const raw = (rawText || "").toUpperCase();
+    const norm = asciify(rawText || "");          // Türkçe karaktersiz
+    const vinText = norm.replace(/O/g, "0");       // VIN için O->0
+    const out = {};
+
+    // VIN: 17 hane, I/O/Q içermez
+    const vin = vinText.match(/\b[A-HJ-NPR-Z0-9]{17}\b/);
+    if (vin) out.vin = vin[0];
+
+    // Plaka: 2 rakam + 1-4 harf + 2-5 rakam (TR)
+    const plate = raw.replace(/İ/g, "I").match(/\b(\d{2})\s?([A-PR-VYZ]{1,4})\s?(\d{2,5})\b/);
+    if (plate) out.plate = `${plate[1]} ${plate[2]} ${plate[3]}`;
+
+    // Yakıt cinsi (anahtar kelime)
+    const fuelMap = [
+      [/\b(DIZEL|DIESEL|MAZOT)\b/, "Dizel"],
+      [/\b(BENZIN|BENZINLI|KURSUNSUZ|UNLEADED)\b/, "Benzin"],
+      [/\b(LPG|OTOGAZ)\b/, "LPG"],
+      [/\b(HIBRIT|HYBRID)\b/, "Hibrit"],
+      [/\b(ELEKTRIK|ELECTRIC)\b/, "Elektrik"],
+    ];
+    for (const [re, val] of fuelMap) { if (re.test(norm)) { out.fuel = val; break; } }
+
+    // Model yılı: 1980-2035, plaka/VIN'e ait olmayan
+    const years = (norm.match(/\b(19[89]\d|20[0-3]\d)\b/g) || [])
+      .filter((y) => !(out.plate && out.plate.includes(y)) && !(out.vin && out.vin.includes(y)));
+    if (years.length) out.year = years[0];
+
+    // Marka: bilinen listeden
+    const brands = [
+      ["BMW", "BMW"], ["MINI", "Mini"], ["MERCEDES", "Mercedes"],
+      ["VOLKSWAGEN", "Volkswagen"], ["AUDI", "Audi"], ["FORD", "Ford"],
+      ["RENAULT", "Renault"], ["FIAT", "Fiat"], ["TOYOTA", "Toyota"],
+      ["HONDA", "Honda"], ["OPEL", "Opel"], ["PEUGEOT", "Peugeot"],
+      ["CITROEN", "Citroen"], ["HYUNDAI", "Hyundai"], ["KIA", "Kia"],
+      ["NISSAN", "Nissan"], ["VOLVO", "Volvo"], ["SKODA", "Skoda"],
+      ["SEAT", "Seat"], ["DACIA", "Dacia"],
+    ];
+    for (const [key, val] of brands) {
+      if (new RegExp("\\b" + key + "\\b").test(norm)) {
+        out.brand = val;
+        // markadan sonraki olası model tokenı (ör. BMW 320I)
+        const mm = norm.match(new RegExp(key + "[\\s-]+([A-Z0-9]{2,10})"));
+        if (mm && !/^(BENZIN|DIZEL|LPG)$/.test(mm[1])) out.model = mm[1];
+        break;
+      }
+    }
+    return out;
+  }
+
+  function setSelectVal(id, val) {
+    const el = document.getElementById(id);
+    if (!el || !val) return false;
+    const opt = [...el.options].find((o) => o.value.toUpperCase() === val.toUpperCase());
+    if (opt) { el.value = opt.value; return true; }
+    return false;
+  }
+
   async function scanVin() {
     const status = document.getElementById("ocrStatus");
     const input = document.createElement("input");
     input.type = "file"; input.accept = "image/*"; input.capture = "environment";
     input.onchange = async () => {
       const f = input.files[0]; if (!f) return;
+      // 1) Ruhsat fotoğrafını hemen kaydet
+      const photo = await fileToDataURL(f);
+      current.photosIn.push({ data: photo, ts: Date.now(), tag: "ruhsat" });
+      refreshPhotosIn();
+
       status.textContent = "OCR motoru yükleniyor…";
       try {
         if (!window.Tesseract) await loadScript("https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js");
         status.textContent = "Ruhsat okunuyor… (biraz sürebilir)";
         const dataUrl = await fileToDataURL(f, 1600, 0.85);
         const { data } = await window.Tesseract.recognize(dataUrl, "eng");
-        const text = (data.text || "").toUpperCase().replace(/O/g, "0").replace(/[^A-HJ-NPR-Z0-9\s]/g, " ");
-        const m = text.match(/\b[A-HJ-NPR-Z0-9]{17}\b/); // VIN 17 hane, I/O/Q yok
-        if (m) {
-          document.getElementById("v_vin").value = m[0];
-          status.innerHTML = `<span class="ok">VIN bulundu: ${m[0]}</span>`;
+        const info = parseRuhsat(data.text || "");
+
+        // 2) Alanları doldur (sadece boş olanları ezmemek için: OCR bulduysa yaz)
+        const found = [];
+        if (info.vin) { document.getElementById("v_vin").value = info.vin; found.push("Şasi"); }
+        if (info.plate) { document.getElementById("v_plate").value = info.plate; found.push("Plaka"); }
+        if (info.year) { document.getElementById("v_year").value = info.year; found.push("Yıl"); }
+        if (info.fuel) { setSelectVal("v_fuel", info.fuel); found.push("Yakıt"); }
+        if (info.brand) {
+          if (!setSelectVal("v_brand", info.brand)) {
+            setSelectVal("v_brand", "Diğer");
+            const md = document.getElementById("v_model");
+            if (!md.value) md.value = [info.brand, info.model].filter(Boolean).join(" ");
+          }
+          found.push("Marka");
+        }
+        if (info.model && !document.getElementById("v_model").value) {
+          document.getElementById("v_model").value = info.model; found.push("Model");
+        }
+
+        if (found.length) {
+          status.innerHTML = `<span class="ok">Ruhsat fotoğrafı eklendi. Okunanlar: ${found.join(", ")}. Lütfen kontrol et.</span>`;
         } else {
-          status.innerHTML = `<span class="warn">17 haneli VIN net okunamadı. Fotoğrafı yakın/net çekip tekrar dene ya da elle gir.</span>`;
+          status.innerHTML = `<span class="warn">Fotoğraf eklendi ama bilgiler net okunamadı. Yakın/net çekip tekrar dene ya da elle gir.</span>`;
         }
       } catch (err) {
-        status.innerHTML = `<span class="warn">OCR için internet gerekli. Şimdilik VIN'i elle girebilirsin.</span>`;
+        status.innerHTML = `<span class="warn">Fotoğraf eklendi. OCR için internet gerekli; bilgileri elle girebilirsin.</span>`;
       }
     };
     input.click();
