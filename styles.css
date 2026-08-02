@@ -102,14 +102,19 @@ main { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolli
 .card {
   background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 14px; margin-bottom: 10px; cursor: pointer;
+  display: flex; align-items: stretch; gap: 12px;
 }
 .card:active { border-color: var(--pri); }
-.card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.card-main { flex: 1; min-width: 0; }
+.card-right { display: flex; flex-direction: column; align-items: flex-end; justify-content: flex-start; gap: 8px; flex-shrink: 0; }
+.card-thumb { width: 68px; height: 52px; border-radius: 8px; object-fit: cover; border: 1px solid var(--line); background: #0e1728; }
+.card-thumb.is-ph { object-fit: contain; padding: 2px; }
 .plate {
+  display: inline-block; margin-bottom: 6px;
   font-weight: 700; font-size: 15px; letter-spacing: .5px;
   background: #0e1728; border: 1px solid var(--line); padding: 3px 8px; border-radius: 6px;
 }
-.st { font-size: 11px; padding: 3px 9px; border-radius: 20px; }
+.st { font-size: 11px; padding: 3px 9px; border-radius: 20px; white-space: nowrap; }
 .st-open { background: #3a2d0e; color: #fbbf24; }
 .st-done { background: #0e3320; color: #4ade80; }
 .card-title { font-weight: 600; font-size: 16px; }
@@ -153,6 +158,13 @@ main { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolli
 .chk { display: flex; align-items: center; gap: 10px; padding: 9px 0; font-size: 14px; border-bottom: 1px solid #1a2540; cursor: pointer; }
 .chk:last-child { border-bottom: none; }
 .chk input { width: 20px; height: 20px; accent-color: var(--pri); }
+
+/* Geçmiş kayıtlar */
+.hist { background: #0e1728; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-top: 8px; cursor: pointer; }
+.hist:active { border-color: var(--pri); }
+.hist-top { display: flex; justify-content: space-between; align-items: center; }
+.hist-top b { font-size: 14px; }
+.hist-sub { color: var(--mut); font-size: 12px; margin-top: 3px; }
 
 /* Summary */
 .summary .lbl { display: block; color: var(--mut); font-size: 11px; }

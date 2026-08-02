@@ -19,7 +19,7 @@
   };
 
   // Uygulama sürümü (SW cache ile aynı tutulur)
-  const APP_VERSION = "v10";
+  const APP_VERSION = "v12";
 
   // Atölye bilgileri (çıktı ve giriş ekranında kullanılır)
   const SHOP = {
@@ -145,14 +145,20 @@
         const st = STATUS[j.status] || STATUS.kabul;
         const v = j.vehicle;
         const title = [v.brand, v.model].filter(Boolean).join(" ") || "Araç";
+        // Araç fotoğrafı (ruhsat olmayan ilk foto); yoksa placeholder
+        const carPhoto = (j.photosIn || []).find((p) => p.tag !== "ruhsat");
+        const thumb = carPhoto ? carPhoto.data : "car.svg";
         return `<div class="card" data-id="${j.id}">
-          <div class="card-top">
+          <div class="card-main">
             <span class="plate">${esc(v.plate) || "—"}</span>
-            <span class="st ${st.cls}">${st.label}</span>
+            <div class="card-title">${esc(title)}</div>
+            <div class="card-sub">${esc(j.customer.name) || "İsimsiz"} · ${esc(v.km) ? esc(v.km) + " km" : "—"}</div>
+            <div class="card-date">${fmtDate(j.createdAt)}</div>
           </div>
-          <div class="card-title">${esc(title)}</div>
-          <div class="card-sub">${esc(j.customer.name) || "İsimsiz"} · ${esc(v.km) ? esc(v.km) + " km" : "—"}</div>
-          <div class="card-date">${fmtDate(j.createdAt)}</div>
+          <div class="card-right">
+            <span class="st ${st.cls}">${st.label}</span>
+            <img class="card-thumb ${carPhoto ? "" : "is-ph"}" src="${thumb}" alt="" loading="lazy" />
+          </div>
         </div>`;
       }).join("");
       cards.querySelectorAll(".card").forEach((el) => {
@@ -180,6 +186,38 @@
   function startNew() {
     current = newJob();
     renderKabul();
+  }
+
+  // Aynı plakaya ait diğer kayıtlar (geçmiş)
+  const plateKey = (p) => (p || "").toUpperCase().replace(/\s+/g, "");
+  async function findHistory(plate, excludeId) {
+    const key = plateKey(plate);
+    if (!key) return [];
+    const all = await DB.all();
+    return all
+      .filter((j) => j.id !== excludeId && plateKey(j.vehicle && j.vehicle.plate) === key)
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  }
+  async function renderHistoryInto(containerId, plate, excludeId) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    const list = await findHistory(plate, excludeId);
+    if (!list.length) { el.innerHTML = ""; el.style.display = "none"; return; }
+    el.style.display = "";
+    el.innerHTML = `<h3>Geçmiş Servis Kayıtları <span class="opt">(${list.length})</span></h3>` +
+      list.map((j) => {
+        const st = STATUS[j.status] || STATUS.kabul;
+        const done = (j.workDone && j.workDone.length ? j.workDone : j.maintenance) || [];
+        const items = done.slice(0, 3).map((id) => window.CATALOG_LABELS[id] || id).join(", ");
+        return `<div class="hist" data-id="${j.id}">
+          <div class="hist-top">
+            <b>${fmtDate(j.deliveredAt || j.createdAt)}</b>
+            <span class="st ${st.cls}">${st.label}</span>
+          </div>
+          <div class="hist-sub">${esc(j.vehicle.km) ? esc(j.vehicle.km) + " km · " : ""}${done.length} işlem${items ? ": " + esc(items) + (done.length > 3 ? "…" : "") : ""}</div>
+        </div>`;
+      }).join("");
+    el.querySelectorAll(".hist").forEach((h) => (h.onclick = () => openJob(h.dataset.id)));
   }
 
   async function openJob(id) {
@@ -248,7 +286,7 @@
           <div class="row2">
             <select id="v_brand" class="in">
               <option value="">Marka</option>
-              ${["BMW","Mini","Mercedes","Diğer"].map(b=>`<option ${j.vehicle.brand===b?"selected":""}>${b}</option>`).join("")}
+              ${["BMW","Mini","Mercedes","Volkswagen","Opel","Citroen","Land Rover","Diğer"].map(b=>`<option ${j.vehicle.brand===b?"selected":""}>${b}</option>`).join("")}
             </select>
             <input id="v_model" class="in" placeholder="Model" value="${esc(j.vehicle.model)}" />
           </div>
@@ -270,6 +308,8 @@
           <button id="scanVin" class="btn btn-ghost">📷 Ruhsat oku (OCR)</button>
           <div id="ocrStatus" class="ocr-status"></div>
         </section>
+
+        <section class="fs" id="history" style="display:none"></section>
 
         <section class="fs">
           <h3>Fotoğraflar</h3>
@@ -299,6 +339,11 @@
 
     // bakım katalog
     renderCatalog(document.getElementById("mnt"), j.maintenance);
+
+    // geçmiş kayıtlar (plaka ile) — başta ve plaka değişince
+    renderHistoryInto("history", j.vehicle.plate, j.id);
+    document.getElementById("v_plate").addEventListener("change", (e) =>
+      renderHistoryInto("history", e.target.value, j.id));
 
     // VIN OCR
     document.getElementById("scanVin").onclick = () => scanVin();
@@ -389,6 +434,8 @@
           ${j.complaints ? `<div><span class="lbl">Şikayet</span><span>${esc(j.complaints)}</span></div>` : ""}
         </section>
 
+        <section class="fs" id="history" style="display:none"></section>
+
         <section class="fs">
           <h3>Yapılan İşlemler</h3>
           <div class="sub">Talep edilenler ön seçili geldi; ekle/çıkar.</div>
@@ -432,6 +479,9 @@
 
     // imza
     buildSignature(document.getElementById("sigWrap"), j, teslim);
+
+    // geçmiş kayıtlar (aynı plaka)
+    renderHistoryInto("history", j.vehicle.plate, j.id);
 
     // olaylar
     document.getElementById("back").onclick = () => renderList();
@@ -583,7 +633,8 @@
       ["HONDA", "Honda"], ["OPEL", "Opel"], ["PEUGEOT", "Peugeot"],
       ["CITROEN", "Citroen"], ["HYUNDAI", "Hyundai"], ["KIA", "Kia"],
       ["NISSAN", "Nissan"], ["VOLVO", "Volvo"], ["SKODA", "Skoda"],
-      ["SEAT", "Seat"], ["DACIA", "Dacia"],
+      ["SEAT", "Seat"], ["DACIA", "Dacia"], ["LAND ROVER", "Land Rover"],
+      ["RANGE ROVER", "Land Rover"],
     ];
     for (const [key, val] of brands) {
       if (new RegExp("\\b" + key + "\\b").test(norm)) {
@@ -661,7 +712,7 @@
         // 2) Alanları doldur (sadece boş olanları ezmemek için: OCR bulduysa yaz)
         const found = [];
         if (info.vin) { document.getElementById("v_vin").value = info.vin; found.push("Şasi"); }
-        if (info.plate) { document.getElementById("v_plate").value = info.plate; found.push("Plaka"); }
+        if (info.plate) { document.getElementById("v_plate").value = info.plate; found.push("Plaka"); renderHistoryInto("history", info.plate, current.id); }
         if (info.year) { document.getElementById("v_year").value = info.year; found.push("Yıl"); }
         if (info.fuel) { setSelectVal("v_fuel", info.fuel); found.push("Yakıt"); }
         if (info.brand) {
