@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <rect width="192" height="192" rx="42" fill="#0b1220"/>
+  <rect width="192" height="192" rx="42" fill="url(#g)" opacity="0.15"/>
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#3b82f6"/><stop offset="1" stop-color="#0b1220"/>
+  </linearGradient></defs>
+  <text x="96" y="86" font-family="Arial, sans-serif" font-size="58" font-weight="800"
+        fill="#e8edf6" text-anchor="middle">MT</text>
+  <!-- wrench -->
+  <path d="M63 120c-3-3-3-8 0-11l20-20c-2-8 0-17 6-23 7-7 17-9 26-6l-13 13 9 9 13-13c3 9 1 19-6 26-6 6-15 8-23 6l-20 20c-3 3-8 3-11 0z"
+        fill="#3b82f6"/>
+  <circle cx="96" cy="150" r="7" fill="#3b82f6"/>
+</svg>
