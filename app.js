@@ -555,10 +555,22 @@
     ];
     for (const [re, val] of fuelMap) { if (re.test(norm)) { out.fuel = val; break; } }
 
-    // Model yılı: 1980-2035, plaka/VIN'e ait olmayan
-    const years = (norm.match(/\b(19[89]\d|20[0-3]\d)\b/g) || [])
-      .filter((y) => !(out.plate && out.plate.includes(y)) && !(out.vin && out.vin.includes(y)));
-    if (years.length) out.year = years[0];
+    // Model yılı: önce (D.4) MODEL YILI etiketini hedefle; ruhsatta birden çok
+    // tarih (ilk tescil, tescil tarihi, muayene) olduğu için "ilk yıl" güvenilmez.
+    const YR = "(19[89]\\d|20[0-3]\\d)";
+    let year = null;
+    // 1) "MODEL YILI" etiketinden sonraki ilk yıl (araç sınıfı vb. araya girebilir)
+    const lbl = norm.match(new RegExp("MODEL\\s*YIL[I]?\\b[\\s\\S]{0,40}?\\b" + YR + "\\b"));
+    if (lbl) year = lbl[1];
+    // 2) Etiket okunamadıysa: gg/aa/yyyy tarihlerinin parçası OLMAYAN (tek başına) yıl
+    if (!year) {
+      const re = new RegExp("(^|[^\\d/.\\-])" + YR + "\\b", "g");
+      let mm2; const cand = [];
+      while ((mm2 = re.exec(norm))) cand.push(mm2[2]);
+      const filtered = cand.filter((y) => !(out.plate && out.plate.includes(y)) && !(out.vin && out.vin.includes(y)));
+      if (filtered.length) year = filtered[0];
+    }
+    if (year) out.year = year;
 
     // Marka: bilinen listeden
     const brands = [
