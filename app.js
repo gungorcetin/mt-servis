@@ -19,7 +19,7 @@
   };
 
   // Uygulama sürümü (SW cache ile aynı tutulur)
-  const APP_VERSION = "v13";
+  const APP_VERSION = "v14";
 
   // Atölye bilgileri (çıktı ve giriş ekranında kullanılır)
   const SHOP = {
@@ -256,15 +256,40 @@
     return wrap;
   }
 
+  // ---------- Kaydet / Paylaş (iOS uyumlu) ----------
+  const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) ||
+    (/Mac/.test(navigator.userAgent) && "ontouchend" in document);
+
+  async function shareFile(dataUrl, filename) {
+    const blob = await (await fetch(dataUrl)).blob();
+    const file = new File([blob], filename, { type: blob.type || "image/jpeg" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file] });
+      return true;
+    }
+    return false;
+  }
+  async function saveImage(dataUrl, filename) {
+    // iOS'ta <a download> güvenilmez → paylaşım sayfası (Görseli/Dosyalara Kaydet)
+    if (isIOS) {
+      try { if (await shareFile(dataUrl, filename)) return; }
+      catch (e) { if (e && e.name === "AbortError") return; }
+    }
+    const a = document.createElement("a");
+    a.href = dataUrl; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+
   // ---------- Fotoğraf büyük görünüm (lightbox) ----------
-  function openLightbox(dataUrl) {
+  function openLightbox(dataUrl, filename) {
+    const name = filename || ("mt-servis-" + Date.now() + ".jpg");
     const ov = document.createElement("div");
     ov.className = "lightbox";
     const canShare = !!(navigator.canShare && navigator.share);
     ov.innerHTML = `
       <div class="lb-bar">
         ${canShare ? '<button class="lb-btn" id="lbShare">📤 Paylaş</button>' : ""}
-        <a class="lb-btn" id="lbSave" download="mt-servis-${Date.now()}.jpg" href="${dataUrl}">⬇︎ Kaydet</a>
+        <button class="lb-btn" id="lbSave">⬇︎ Kaydet</button>
         <button class="lb-btn" id="lbClose">✕ Kapat</button>
       </div>
       <div class="lb-stage"><img class="lb-img" src="${dataUrl}" alt="" /></div>`;
@@ -272,15 +297,80 @@
     const close = () => ov.remove();
     ov.querySelector("#lbClose").onclick = close;
     ov.querySelector(".lb-stage").onclick = (e) => { if (e.target.classList.contains("lb-stage")) close(); };
+    ov.querySelector("#lbSave").onclick = () => saveImage(dataUrl, name);
     const share = ov.querySelector("#lbShare");
-    if (share) share.onclick = async () => {
-      try {
-        const blob = await (await fetch(dataUrl)).blob();
-        const file = new File([blob], "mt-servis-foto.jpg", { type: blob.type || "image/jpeg" });
-        if (navigator.canShare({ files: [file] })) await navigator.share({ files: [file] });
-        else await navigator.share({ title: "MT Servis" });
-      } catch (e) { /* kullanıcı iptal etti */ }
+    if (share) share.onclick = async () => { try { await shareFile(dataUrl, name); } catch (e) { /* iptal */ } };
+  }
+
+  // Basit görsel yükleyici (imza vb.)
+  function loadImg(src) {
+    return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
+  }
+
+  // İş emrini bir görsele (PNG/JPEG) çizer — iOS'ta paylaş/kaydet için
+  async function buildWorkOrderImage(j) {
+    const W = 820, pad = 40, s = 2;
+    const big = document.createElement("canvas");
+    big.width = W * s; big.height = 2600 * s;
+    const ctx = big.getContext("2d");
+    ctx.scale(s, s);
+    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, W, 2600);
+    ctx.textBaseline = "top";
+    const x = pad, right = W - pad, colW = right - x;
+    let y = pad;
+    const hr = () => { ctx.strokeStyle = "#ddd"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(right, y); ctx.stroke(); };
+    const wrap = (txt, font, maxW, lh) => {
+      ctx.font = font; ctx.fillStyle = "#111";
+      const words = String(txt).split(/\s+/); let ln = "";
+      for (const w of words) {
+        const t = ln ? ln + " " + w : w;
+        if (ctx.measureText(t).width > maxW && ln) { ctx.fillText(ln, x, y); y += lh; ln = w; }
+        else ln = t;
+      }
+      if (ln) { ctx.fillText(ln, x, y); y += lh; }
     };
+    const F = "-apple-system,'Segoe UI',Arial,sans-serif";
+    // Başlık
+    ctx.fillStyle = "#111"; ctx.font = "bold 28px " + F; ctx.fillText("MT Servis — İş Emri", x, y); y += 36;
+    ctx.fillStyle = "#555"; ctx.font = "13px " + F; ctx.fillText(SHOP.address + " · Tel: " + SHOP.phone, x, y); y += 26;
+    hr(); y += 16;
+    // Alanlar (2 sütun)
+    const fields = [
+      ["Plaka", j.vehicle.plate], ["Araç", [j.vehicle.brand, j.vehicle.model, j.vehicle.year].filter(Boolean).join(" ")],
+      ["Müşteri", j.customer.name], ["Telefon", j.customer.phone],
+      ["KM", j.vehicle.km], ["VIN", j.vehicle.vin],
+      ["Yakıt", j.vehicle.fuel], ["Giriş", fmtDate(j.createdAt)], ["Teslim", fmtDate(j.deliveredAt)],
+    ];
+    const gap = 20, cw = (colW - gap) / 2; let col = 0;
+    for (const [k, v] of fields) {
+      const cx = x + col * (cw + gap);
+      ctx.fillStyle = "#666"; ctx.font = "12px " + F; ctx.fillText(k, cx, y);
+      ctx.fillStyle = "#111"; ctx.font = "bold 15px " + F;
+      let val = (v || "—") + "";
+      while (val && ctx.measureText(val).width > cw) val = val.slice(0, -2);
+      ctx.fillText(val || "—", cx, y + 16);
+      col++; if (col > 1) { col = 0; y += 46; }
+    }
+    if (col === 1) y += 46;
+    y += 4;
+    const section = (t) => { hr(); y += 10; ctx.fillStyle = "#111"; ctx.font = "bold 15px " + F; ctx.fillText(t, x, y); y += 24; };
+    if (j.complaints) { section("Şikayetler"); wrap(j.complaints, "14px " + F, colW, 20); y += 6; }
+    section("Yapılan İşlemler");
+    const done = (j.workDone && j.workDone.length ? j.workDone : j.maintenance) || [];
+    if (done.length) { ctx.fillStyle = "#111"; for (const id of done) { ctx.font = "14px " + F; ctx.fillText("•  " + (window.CATALOG_LABELS[id] || id), x, y); y += 22; } }
+    else { ctx.font = "14px " + F; ctx.fillStyle = "#111"; ctx.fillText("-", x, y); y += 22; }
+    y += 4;
+    if (j.workNotes) { section("Notlar"); wrap(j.workNotes, "14px " + F, colW, 20); y += 6; }
+    if (j.signature) {
+      section("Müşteri İmzası");
+      try { const sig = await loadImg(j.signature); const sw = 260, sh = sw * (sig.height / sig.width || 0.33); ctx.strokeStyle = "#ddd"; ctx.strokeRect(x, y, sw, sh); ctx.drawImage(sig, x, y, sw, sh); y += sh + 10; } catch (e) {}
+    }
+    y += pad;
+    // Kullanılan yüksekliğe kırp
+    const out = document.createElement("canvas");
+    out.width = W * s; out.height = Math.round(y * s);
+    out.getContext("2d").drawImage(big, 0, 0);
+    return out.toDataURL("image/jpeg", 0.92);
   }
 
   // Kabul ekranındaki "Fotoğraflar" gridini (yeniden) oluştur
@@ -596,13 +686,23 @@
         ${j.signature ? `<h3 class="pa-h">Müşteri İmzası</h3><img class="pa-sig" src="${j.signature}"/>` : ""}
       </div>
       <div class="actions no-print">
-        <button class="btn btn-primary" id="s_print">🖨️ Yazdır / PDF</button>
+        <button class="btn btn-primary" id="s_img">📤 İş Emrini Paylaş / Kaydet</button>
+        <button class="btn btn-ghost" id="s_print">🖨️ Yazdır</button>
         <button class="btn btn-ghost" id="s_back2">‹ Geri Dön</button>
       </div>`;
     const back = () => { document.querySelector(".tabbar").style.display = ""; renderDetail(); };
     document.getElementById("s_back").onclick = back;
     document.getElementById("s_back2").onclick = back;
     document.getElementById("s_print").onclick = () => printArea("printArea");
+    document.getElementById("s_img").onclick = async () => {
+      const btn = document.getElementById("s_img");
+      const old = btn.textContent; btn.disabled = true; btn.textContent = "Hazırlanıyor…";
+      try {
+        const url = await buildWorkOrderImage(j);
+        openLightbox(url, "is-emri-" + (plateKey(j.vehicle.plate) || "mt") + ".jpg");
+      } catch (e) { toast("Görsel oluşturulamadı"); }
+      btn.disabled = false; btn.textContent = old;
+    };
   }
 
   // İş emrini yazdır/PDF — izole bir iframe içinde yazdırır
