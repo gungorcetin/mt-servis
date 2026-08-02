@@ -1,5 +1,5 @@
 // MT Servis - basit offline cache
-const CACHE = "mtservis-v12";
+const CACHE = "mtservis-v13";
 const ASSETS = [
   "./",
   "./index.html",

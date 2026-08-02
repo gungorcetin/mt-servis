@@ -197,6 +197,26 @@ main { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolli
   .print-area { border-radius: 0; padding: 0; margin: 0; }
 }
 
+/* Lightbox (fotoğraf büyük görünüm) */
+.lightbox {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0,0,0,.92);
+  display: flex; flex-direction: column;
+  padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom);
+}
+.lb-bar { display: flex; justify-content: flex-end; gap: 8px; padding: 12px; }
+.lb-btn {
+  background: #1c2743; color: #fff; border: 1px solid var(--line);
+  padding: 10px 14px; border-radius: 10px; font-size: 14px; font-weight: 600;
+  cursor: pointer; text-decoration: none; display: inline-block;
+}
+.lb-btn:active { background: #24314f; }
+.lb-stage { flex: 1; display: flex; align-items: center; justify-content: center; overflow: auto; padding: 10px; }
+.lb-img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 8px; }
+
+/* Photos: tıklanabilir imleç */
+.thumb > img { cursor: zoom-in; }
+
 /* Toast */
 .toast {
   position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%) translateY(20px);

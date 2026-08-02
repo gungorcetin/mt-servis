@@ -19,7 +19,7 @@
   };
 
   // Uygulama sürümü (SW cache ile aynı tutulur)
-  const APP_VERSION = "v12";
+  const APP_VERSION = "v13";
 
   // Atölye bilgileri (çıktı ve giriş ekranında kullanılır)
   const SHOP = {
@@ -248,9 +248,39 @@
       wrap.querySelectorAll(".thumb-x").forEach((b) => {
         b.onclick = () => { onRemove(+b.dataset.i); render(); };
       });
+      wrap.querySelectorAll(".thumb > img").forEach((im, idx) => {
+        im.onclick = () => openLightbox(list[idx].data);
+      });
     };
     render();
     return wrap;
+  }
+
+  // ---------- Fotoğraf büyük görünüm (lightbox) ----------
+  function openLightbox(dataUrl) {
+    const ov = document.createElement("div");
+    ov.className = "lightbox";
+    const canShare = !!(navigator.canShare && navigator.share);
+    ov.innerHTML = `
+      <div class="lb-bar">
+        ${canShare ? '<button class="lb-btn" id="lbShare">📤 Paylaş</button>' : ""}
+        <a class="lb-btn" id="lbSave" download="mt-servis-${Date.now()}.jpg" href="${dataUrl}">⬇︎ Kaydet</a>
+        <button class="lb-btn" id="lbClose">✕ Kapat</button>
+      </div>
+      <div class="lb-stage"><img class="lb-img" src="${dataUrl}" alt="" /></div>`;
+    document.body.appendChild(ov);
+    const close = () => ov.remove();
+    ov.querySelector("#lbClose").onclick = close;
+    ov.querySelector(".lb-stage").onclick = (e) => { if (e.target.classList.contains("lb-stage")) close(); };
+    const share = ov.querySelector("#lbShare");
+    if (share) share.onclick = async () => {
+      try {
+        const blob = await (await fetch(dataUrl)).blob();
+        const file = new File([blob], "mt-servis-foto.jpg", { type: blob.type || "image/jpeg" });
+        if (navigator.canShare({ files: [file] })) await navigator.share({ files: [file] });
+        else await navigator.share({ title: "MT Servis" });
+      } catch (e) { /* kullanıcı iptal etti */ }
+    };
   }
 
   // Kabul ekranındaki "Fotoğraflar" gridini (yeniden) oluştur
@@ -572,7 +602,44 @@
     const back = () => { document.querySelector(".tabbar").style.display = ""; renderDetail(); };
     document.getElementById("s_back").onclick = back;
     document.getElementById("s_back2").onclick = back;
-    document.getElementById("s_print").onclick = () => window.print();
+    document.getElementById("s_print").onclick = () => printArea("printArea");
+  }
+
+  // İş emrini yazdır/PDF — izole bir iframe içinde yazdırır
+  // (mobil ve PWA'da doğrudan window.print()'ten çok daha güvenilir)
+  function printArea(containerId) {
+    const area = document.getElementById(containerId);
+    if (!area) return;
+    const css = `
+      *{box-sizing:border-box}
+      body{font-family:-apple-system,Arial,sans-serif;margin:20px;color:#111}
+      h1{font-size:20px;margin:0}
+      .pa-shop{color:#555;font-size:12px;margin:2px 0 14px}
+      .pa-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 20px;font-size:14px}
+      .k{color:#666}
+      .pa-h{font-size:14px;margin:16px 0 6px;border-bottom:1px solid #ddd;padding-bottom:4px}
+      .pa-ul{font-size:14px;margin:6px 0;padding-left:20px}
+      .pa-sig{border:1px solid #ddd;max-width:280px;width:100%}`;
+    const html = `<!doctype html><html><head><meta charset="utf-8">
+      <title>MT Servis — İş Emri</title><style>${css}</style></head>
+      <body>${area.innerHTML}</body></html>`;
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("aria-hidden", "true");
+    iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;";
+    document.body.appendChild(iframe);
+    const win = iframe.contentWindow;
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    let done = false;
+    const fire = () => {
+      if (done) return; done = true;
+      try { win.focus(); win.print(); } catch (e) { /* yoksay */ }
+      setTimeout(() => iframe.remove(), 3000);
+    };
+    // görsellerin (imza) yüklenmesi için kısa bekleme + onload yedeği
+    iframe.onload = () => setTimeout(fire, 250);
+    setTimeout(fire, 700);
   }
 
   // ---------- Ruhsat OCR (opsiyonel, Tesseract CDN) ----------
